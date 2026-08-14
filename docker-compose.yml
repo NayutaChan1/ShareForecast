@@ -1,0 +1,177 @@
+name: market-sentiment-tracker
+
+x-postgres-env: &postgres-env
+  POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+  POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+  POSTGRES_USER: ${POSTGRES_USER:-market}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market}
+  POSTGRES_DB: ${POSTGRES_DB:-market_sentiment}
+
+x-rabbit-env: &rabbit-env
+  RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+  RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+  RABBITMQ_USER: ${RABBITMQ_USER:-market}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-market}
+
+services:
+  # ── Infrastructure ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-market}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-market}
+      POSTGRES_DB: ${POSTGRES_DB:-market_sentiment}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-market} -d ${POSTGRES_DB:-market_sentiment}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [market]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [market]
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-market}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-market}
+    ports:
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks: [market]
+
+  # ── AI pipeline (Python / FastAPI) ────────────────────────────
+  # Serves sentiment inference + yfinance stock data over HTTP.
+  nlp-engine:
+    build:
+      context: ./nlp-engine
+    restart: unless-stopped
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: [*postgres-env, *rabbit-env]
+      FINBERT_MODEL: ${FINBERT_MODEL:-ProsusAI/finbert}
+      FINBERT_DEVICE: ${FINBERT_DEVICE:-cpu}
+      SCRAPE_INTERVAL_MINUTES: ${SCRAPE_INTERVAL_MINUTES:-10}
+      SCRAPE_MAX_ITEMS: ${SCRAPE_MAX_ITEMS:-25}
+      HF_HOME: /models
+    volumes:
+      - model_cache:/models
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    networks: [market]
+
+  # Consumes sentiment.analyze, runs FinBERT, writes scores back.
+  nlp-worker:
+    build:
+      context: ./nlp-engine
+    restart: unless-stopped
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: [*postgres-env, *rabbit-env]
+      FINBERT_MODEL: ${FINBERT_MODEL:-ProsusAI/finbert}
+      FINBERT_DEVICE: ${FINBERT_DEVICE:-cpu}
+      HF_HOME: /models
+    volumes:
+      - model_cache:/models
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    networks: [market]
+
+  # Scrapes RSS feeds on a schedule and enqueues analysis tasks.
+  news-scraper:
+    build:
+      context: ./nlp-engine
+    restart: unless-stopped
+    command: ["python", "-m", "app.scraper"]
+    environment:
+      <<: [*postgres-env, *rabbit-env]
+      SCRAPE_INTERVAL_MINUTES: ${SCRAPE_INTERVAL_MINUTES:-10}
+      SCRAPE_MAX_ITEMS: ${SCRAPE_MAX_ITEMS:-25}
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    networks: [market]
+
+  # ── API gateway (NestJS) ──────────────────────────────────────
+  api-gateway:
+    build:
+      context: ./api-gateway
+    restart: unless-stopped
+    environment:
+      <<: [*postgres-env, *rabbit-env]
+      NODE_ENV: production
+      API_PORT: 3000
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      NLP_ENGINE_URL: http://nlp-engine:8000
+      BINANCE_API_URL: ${BINANCE_API_URL:-https://data-api.binance.vision/api/v3}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
+      PRICE_POLL_INTERVAL_MS: ${PRICE_POLL_INTERVAL_MS:-5000}
+      PRICE_CACHE_TTL: ${PRICE_CACHE_TTL:-30}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks: [market]
+
+  # ── Frontend (Vue 3 served by nginx) ──────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3000}
+        VITE_WS_URL: ${VITE_WS_URL:-http://localhost:3000}
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      - api-gateway
+    networks: [market]
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+  model_cache:
+
+networks:
+  market:
+    driver: bridge

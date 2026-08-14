@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'tnum';
+  }
+
+  /* Numeric columns must not jitter as digits change. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-ink-600/70 bg-ink-800/80 backdrop-blur;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between border-b border-ink-600/70 px-4 py-3;
+  }
+
+  .panel-title {
+    @apply text-xs font-semibold uppercase tracking-widest text-slate-400;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold;
+  }
+}
+
+/* Scrollbars, scoped to the dark surface they sit on. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2a3346 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #2a3346;
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

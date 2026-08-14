@@ -25,6 +25,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    mem_limit: ${POSTGRES_MEM_LIMIT:-512m}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-market} -d ${POSTGRES_DB:-market_sentiment}"]
       interval: 10s
@@ -35,9 +36,11 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis_data:/data
+    # Only holds short-TTL quotes for a 10-symbol watchlist.
+    mem_limit: 192m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -55,6 +58,7 @@ services:
       - "${RABBITMQ_MGMT_PORT:-15672}:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    mem_limit: ${RABBITMQ_MEM_LIMIT:-512m}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 15s
@@ -73,11 +77,17 @@ services:
       <<: [*postgres-env, *rabbit-env]
       FINBERT_MODEL: ${FINBERT_MODEL:-ProsusAI/finbert}
       FINBERT_DEVICE: ${FINBERT_DEVICE:-cpu}
+      # Off by default — this service serves stock data; scoring lives in nlp-worker.
+      FINBERT_EAGER_LOAD: ${FINBERT_EAGER_LOAD:-false}
+      TORCH_THREADS: ${TORCH_THREADS:-2}
+      OMP_NUM_THREADS: ${TORCH_THREADS:-2}
       SCRAPE_INTERVAL_MINUTES: ${SCRAPE_INTERVAL_MINUTES:-10}
       SCRAPE_MAX_ITEMS: ${SCRAPE_MAX_ITEMS:-25}
       HF_HOME: /models
     volumes:
       - model_cache:/models
+    # Headroom for an on-demand /analyze load without letting a leak eat the host.
+    mem_limit: ${NLP_ENGINE_MEM_LIMIT:-2g}
     depends_on:
       postgres: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
@@ -99,9 +109,14 @@ services:
       <<: [*postgres-env, *rabbit-env]
       FINBERT_MODEL: ${FINBERT_MODEL:-ProsusAI/finbert}
       FINBERT_DEVICE: ${FINBERT_DEVICE:-cpu}
+      # The worker is the one process that genuinely needs the weights resident.
+      FINBERT_EAGER_LOAD: "true"
+      TORCH_THREADS: ${TORCH_THREADS:-2}
+      OMP_NUM_THREADS: ${TORCH_THREADS:-2}
       HF_HOME: /models
     volumes:
       - model_cache:/models
+    mem_limit: ${NLP_WORKER_MEM_LIMIT:-2g}
     depends_on:
       postgres: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
@@ -117,6 +132,8 @@ services:
       <<: [*postgres-env, *rabbit-env]
       SCRAPE_INTERVAL_MINUTES: ${SCRAPE_INTERVAL_MINUTES:-10}
       SCRAPE_MAX_ITEMS: ${SCRAPE_MAX_ITEMS:-25}
+    # Never imports torch — feedparser and a DB connection only.
+    mem_limit: ${SCRAPER_MEM_LIMIT:-256m}
     depends_on:
       postgres: {condition: service_healthy}
       rabbitmq: {condition: service_healthy}
@@ -140,6 +157,7 @@ services:
       PRICE_CACHE_TTL: ${PRICE_CACHE_TTL:-30}
     ports:
       - "${API_PORT:-3000}:3000"
+    mem_limit: ${API_MEM_LIMIT:-512m}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
@@ -162,6 +180,7 @@ services:
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8080}:80"
+    mem_limit: 128m
     depends_on:
       - api-gateway
     networks: [market]

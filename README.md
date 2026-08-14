@@ -98,10 +98,42 @@ Aplikasi dirancang tanpa *overhead* orkestrasi berat, ideal untuk *bare-metal* L
 | Resource     | Minimum      | Catatan                                                       |
 |--------------|--------------|---------------------------------------------------------------|
 | **CPU**      | 4 cores      | Inferensi FinBERT berjalan di CPU                             |
-| **RAM**      | 8 GB         | ~2 GB FinBERT (×2 proses), ~1 GB DB + broker, sisanya headroom |
-| **RAM**      | 16 GB        | Direkomendasikan bila menaikkan jumlah worker                 |
-| **Storage**  | 50+ GB SSD   | ~1.5 GB image + ~450 MB bobot model + histori harga           |
+| **RAM**      | 4 GB         | Stack idle di ~1.6 GB dengan batas default                    |
+| **RAM**      | 8 GB         | Direkomendasikan, memberi ruang untuk build image             |
+| **Storage**  | 20+ GB SSD   | ~3 GB image + ~450 MB bobot model + histori harga             |
 | **OS**       | Linux        | Ubuntu Server / Debian. Windows via Docker Desktop juga jalan  |
+
+### Pemakaian memori aktual
+
+Hanya `nlp-worker` yang menahan bobot FinBERT secara permanen (~1 GB). `nlp-engine` memuatnya secara *lazy* — hanya jika `/analyze` dipanggil — karena tugas utamanya menyajikan data saham.
+
+| Container      | Batas   | Idle    |
+|----------------|---------|---------|
+| `nlp-worker`   | 2 GB    | ~1 GB   |
+| `nlp-engine`   | 2 GB    | ~250 MB |
+| `postgres`     | 512 MB  | ~50 MB  |
+| `rabbitmq`     | 512 MB  | ~130 MB |
+| `api-gateway`  | 512 MB  | ~90 MB  |
+| `news-scraper` | 256 MB  | ~80 MB  |
+| `redis`        | 192 MB  | ~10 MB  |
+| `frontend`     | 128 MB  | ~5 MB   |
+
+Semua batas bisa diubah lewat `.env` (`NLP_WORKER_MEM_LIMIT`, `API_MEM_LIMIT`, dst.).
+
+### ⚠️ Pengguna Windows / Docker Desktop — penting
+
+Docker Desktop berjalan di atas WSL2. **Secara default WSL2 mengambil 50% RAM host dan seluruh core CPU**, lalu menahan memorinya sampai WSL dimatikan — ini penyebab umum Windows nge-hang saat build. Batasi lewat `%USERPROFILE%\.wslconfig`:
+
+```ini
+[wsl2]
+memory=10GB
+processors=8
+swap=4GB
+autoMemoryReclaim=gradual
+sparseVhd=true
+```
+
+Terapkan dengan `wsl --shutdown`, lalu nyalakan ulang Docker Desktop. Turunkan `memory` bila RAM Anda lebih kecil — 6 GB sudah cukup untuk menjalankan stack ini (build butuh sedikit lebih banyak).
 
 ---
 

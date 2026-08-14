@@ -42,12 +42,17 @@ _loader = ThreadPoolExecutor(max_workers=1, thread_name_prefix="finbert-load")
 
 @app.on_event("startup")
 async def warm_up() -> None:
-    """Kick off model loading in the background.
+    """Optionally pre-load the model in the background.
 
-    /health reports modelLoaded=false until it finishes, and /analyze blocks on
-    the same lock, so requests arriving early are correct — just slower.
+    Off by default: this service exists mainly for stock data, and the scoring
+    pipeline runs in nlp-worker, so an eager copy here just holds ~1.3 GB idle.
+    /analyze still works either way — it loads on first call and blocks on the
+    same lock, so early requests are correct, only slower.
     """
-    _loader.submit(analyzer.load)
+    if settings.finbert_eager_load:
+        _loader.submit(analyzer.load)
+    else:
+        log.info("FinBERT will load on first /analyze call (set FINBERT_EAGER_LOAD=true to preload)")
 
 
 @app.get("/health", response_model=HealthResponse)

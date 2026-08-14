@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # FinBERT
     finbert_model: str = "ProsusAI/finbert"
     finbert_device: str = "cpu"
+    # Load the model at process start instead of on first use. The worker needs
+    # this; the API does not, and an idle eager copy costs ~1.3 GB of RSS.
+    finbert_eager_load: bool = False
+    # Torch grabs one thread per core by default. On a 16-core box that means
+    # two model processes fighting over 32 threads, which starves everything
+    # else on the machine for no throughput gain on short headlines.
+    torch_threads: int = 2
 
     # Scraper
     scrape_interval_minutes: int = 10

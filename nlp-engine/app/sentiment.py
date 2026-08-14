@@ -71,9 +71,19 @@ class SentimentAnalyzer:
             if self._pipeline is not None:
                 return
             # Imported here so the scraper process never pays the torch import cost.
+            import torch
             from transformers import pipeline
 
-            log.info("loading FinBERT model %s on %s", self.model_name, self.device)
+            # Must be set before the first inference, and it caps the thread
+            # pool for this whole process.
+            torch.set_num_threads(settings.torch_threads)
+
+            log.info(
+                "loading FinBERT model %s on %s (%d torch threads)",
+                self.model_name,
+                self.device,
+                settings.torch_threads,
+            )
             self._pipeline = pipeline(
                 task="text-classification",
                 model=self.model_name,

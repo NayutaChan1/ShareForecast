@@ -3,6 +3,7 @@ import { onUnmounted, ref, type Ref } from 'vue';
 
 import type { LiveSentiment, Quote } from '../types';
 
+// Empty means same-origin — see the note in api/client.ts.
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:3000';
 
 /**
@@ -15,11 +16,13 @@ let socket: Socket | null = null;
 
 function getSocket(): Socket {
   if (!socket) {
-    socket = io(WS_URL, {
+    const options = {
       transports: ['websocket', 'polling'],
       reconnectionDelay: 1_000,
       reconnectionDelayMax: 10_000,
-    });
+    };
+    // io() without a URL connects to the page's own origin; io('') does not.
+    socket = WS_URL ? io(WS_URL, options) : io(options);
   }
   return socket;
 }

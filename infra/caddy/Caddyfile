@@ -1,0 +1,44 @@
+# Caddy fetches and renews a Let's Encrypt certificate for $DOMAIN on its own,
+# provided ports 80 and 443 are reachable from the internet and the domain's
+# A record already points at this server.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Serving the API under the same domain as the app is what makes the
+	# frontend same-origin, so no CORS preflight ever happens in production.
+	handle /api/* {
+		reverse_proxy api-gateway:3000
+	}
+
+	# Socket.IO's handshake path. reverse_proxy upgrades WebSocket traffic
+	# automatically, so no extra directive is needed here.
+	handle /socket.io/* {
+		reverse_proxy api-gateway:3000
+	}
+
+	# Everything else is the Vue SPA.
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	header {
+		# Tell browsers to stay on HTTPS for this domain.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy's default advertises its version.
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

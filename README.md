@@ -193,6 +193,87 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 ---
 
+## 🚢 Deployment Produksi
+
+Stack ini sudah *compose-native*, jadi deployment-nya satu VPS tanpa rearsitektur. Overlay [`docker-compose.prod.yml`](docker-compose.prod.yml) menambahkan Caddy sebagai satu-satunya pintu masuk dan menutup seluruh port lain.
+
+### Yang berubah di produksi
+
+| | Development | Produksi |
+|---|---|---|
+| Port terbuka | 3000, 8080, 15672 | **hanya 80 & 443** (Caddy) |
+| RabbitMQ Management | terbuka | terkunci di `127.0.0.1`, akses via SSH tunnel |
+| TLS | tidak ada | otomatis via Let's Encrypt |
+| Frontend → API | cross-origin (CORS) | **same-origin**, tanpa CORS |
+
+### Prasyarat
+
+- VPS **4 GB RAM** (idle ~1.2 GB, puncak ~2.3 GB). 8 GB lebih lega bila build di server.
+- Docker Engine 24+ & Compose v2.24+ (tag `!reset` butuh versi ini).
+- Domain dengan **A record sudah mengarah ke IP server** — Caddy memverifikasi lewat HTTP sebelum menerbitkan sertifikat, jadi DNS harus siap lebih dulu.
+- Port 80 & 443 tidak diblokir firewall.
+
+### Langkah
+
+```bash
+git clone <repo-url> && cd ShareForecast
+
+# 1. Siapkan konfigurasi
+cp .env.production.example .env
+
+# 2. Buat password acak, jangan diketik manual
+openssl rand -base64 24   # -> POSTGRES_PASSWORD
+openssl rand -base64 24   # -> RABBITMQ_PASSWORD
+
+# 3. Edit .env, isi setiap baris bertanda [GANTI]
+nano .env
+
+# 4. Jalankan — overlay produksi WAJIB disertakan
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+> ⚠️ Kalau `-f docker-compose.prod.yml` lupa disertakan, stack jalan dengan konfigurasi development — **port 15672 terbuka ke internet dengan password RabbitMQ Anda**. Simpan perintahnya sebagai alias agar tidak terlewat.
+
+Build pertama 10–20 menit (unduh PyTorch + bobot FinBERT ~450 MB). Di VPS 4 GB, build image torch bisa kehabisan memori — kalau itu terjadi, build di lokal lalu push ke registry, atau tambah swap:
+
+```bash
+sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+```
+
+### Verifikasi setelah deploy
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml ps      # semua healthy
+curl -s https://$DOMAIN/api/health                                       # {"status":"ok",...}
+docker compose logs caddy | grep -i "certificate obtained"               # TLS terbit
+docker compose logs -f nlp-worker                                        # FinBERT mulai menskor
+ss -tlnp | grep -E ':(3000|8080)'                                        # harus KOSONG
+```
+
+Baris terakhir yang paling penting — kalau ada isinya, overlay produksi tidak terpakai.
+
+### Operasional
+
+```bash
+# Alias supaya tidak lupa overlay
+alias dcp='docker compose -f docker-compose.yml -f docker-compose.prod.yml'
+
+dcp logs -f api-gateway          # pantau log
+dcp pull && dcp up -d --build    # update setelah git pull
+dcp down                         # matikan (volume data tetap aman)
+
+# Backup database — jadwalkan lewat cron
+dcp exec -T postgres pg_dump -U market market_sentiment | gzip > backup-$(date +%F).sql.gz
+
+# Buka RabbitMQ Management dari mesin Anda
+ssh -L 15672:localhost:15672 user@server   # lalu buka http://localhost:15672
+```
+
+Volume yang **wajib** ikut backup: `postgres_data` (histori harga & sentimen) dan `caddy_data` (sertifikat — Let's Encrypt punya rate limit penerbitan ulang).
+
+---
+
 ## 📡 API Reference
 
 Semua *endpoint* diawali `/api`.

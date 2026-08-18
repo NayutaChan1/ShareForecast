@@ -30,6 +30,11 @@ models/
 # Docker volumes mounted into the repo during local dev
 data/
 
+# Graphify knowledge graph — regenerable from source with `graphify update .`
+# Commit it instead if you want the graph shared across the team; graphify
+# ships a git merge driver for graph.json to handle the conflicts.
+graphify-out/
+
 # Editors / OS
 .vscode/
 .idea/

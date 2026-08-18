@@ -1,0 +1,66 @@
+# Production overlay. Always apply it on top of the base file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What it changes:
+#   - Caddy becomes the only thing listening on the public internet (80/443).
+#   - Every other published port is withdrawn, including RabbitMQ Management.
+#   - The frontend is built for same-origin, so no CORS is involved.
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is required, e.g. saham.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL is required for Let's Encrypt}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates live here. Losing this volume means re-issuing them, and
+      # Let's Encrypt rate-limits that, so keep it.
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    mem_limit: 256m
+    depends_on:
+      - api-gateway
+      - frontend
+    networks: [market]
+
+  # Reachable only through Caddy now.
+  # `!reset` is required: Compose MERGES list fields across files, so a plain
+  # `ports: []` would leave the base file's mapping in place and silently keep
+  # the port open to the internet.
+  api-gateway:
+    ports: !reset []
+    environment:
+      # Same-origin in production: the browser calls /api on the app's own
+      # domain, so this only needs to allow that one origin.
+      CORS_ORIGINS: https://${DOMAIN}
+
+  frontend:
+    ports: !reset []
+    build:
+      args:
+        # Empty = relative URLs = same-origin. Do not set these to the domain;
+        # that would reintroduce cross-origin requests for no benefit.
+        VITE_API_BASE_URL: ""
+        VITE_WS_URL: ""
+
+  # Bound to the server's loopback instead of 0.0.0.0, so the management UI is
+  # unreachable from the internet but still available over an SSH tunnel:
+  #   ssh -L 15672:localhost:15672 user@server
+  # then open http://localhost:15672 on your own machine.
+  # `!override` replaces the base mapping instead of adding a second one.
+  rabbitmq:
+    ports: !override
+      - "127.0.0.1:15672:15672"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  caddy_logs:

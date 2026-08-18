@@ -1,0 +1,16 @@
+# Config files whose keys become graph nodes without carrying any
+# architectural meaning — "compilerOptions" outranking DatabaseService as a
+# hub is noise, not a finding.
+tsconfig.json
+tsconfig.*.json
+nest-cli.json
+package-lock.json
+postcss.config.js
+tailwind.config.js
+vite.config.ts
+env.d.ts
+
+# Build output and vendored code.
+**/dist/**
+**/node_modules/**
+graphify-out/**

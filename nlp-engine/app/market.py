@@ -71,7 +71,10 @@ def fetch_candles(symbol: str, interval: str = "1d", limit: int = 500) -> list[d
 def fetch_quote(symbol: str) -> dict[str, Any]:
     """Latest price plus change over the previous close."""
     ticker = yf.Ticker(symbol)
-    frame = ticker.history(period="2d", interval="1d", auto_adjust=False)
+    # A 2-day window often holds only one trading row (weekends, holidays, or
+    # early in the session), which silently pins every change to 0.00%. A week
+    # always contains a previous close to compare against.
+    frame = ticker.history(period="7d", interval="1d", auto_adjust=False)
 
     if frame is None or frame.empty:
         raise NoDataError(f"no market data for '{symbol}'")

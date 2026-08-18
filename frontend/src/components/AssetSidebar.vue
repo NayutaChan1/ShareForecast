@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 import { changeClass, formatPercent, formatPrice } from '../lib/format';
 import type { Asset, Quote } from '../types';
@@ -10,7 +10,15 @@ const props = defineProps<{
   selected: string;
 }>();
 
-const emit = defineEmits<{ select: [symbol: string] }>();
+const emit = defineEmits<{
+  select: [symbol: string];
+  add: [];
+  remove: [symbol: string];
+}>();
+
+// Which row is awaiting delete confirmation. Deleting an asset drops its
+// stored candles too, so it asks before doing it.
+const confirming = ref<string | null>(null);
 
 const groups = computed(() => [
   { label: 'Crypto', items: props.assets.filter((a) => a.type === 'crypto') },
@@ -22,7 +30,18 @@ const groups = computed(() => [
   <aside class="panel flex h-full flex-col overflow-hidden">
     <div class="panel-header">
       <h2 class="panel-title">Watchlist</h2>
-      <span class="text-[11px] text-slate-500">{{ assets.length }} assets</span>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-500">{{ assets.length }}</span>
+        <button
+          type="button"
+          class="grid h-5 w-5 place-items-center rounded bg-ink-600 text-sm leading-none text-slate-300 transition-colors hover:bg-accent hover:text-ink-900"
+          title="Tambah aset"
+          aria-label="Tambah aset"
+          @click="emit('add')"
+        >
+          +
+        </button>
+      </div>
     </div>
 
     <div class="flex-1 overflow-y-auto">
@@ -34,11 +53,10 @@ const groups = computed(() => [
           {{ group.label }}
         </p>
 
-        <button
+        <div
           v-for="asset in group.items"
           :key="asset.symbol"
-          type="button"
-          class="flex w-full items-center justify-between border-l-2 px-4 py-2.5 text-left transition-colors"
+          class="group relative flex w-full cursor-pointer items-center justify-between border-l-2 px-4 py-2.5 text-left transition-colors"
           :class="
             asset.symbol === selected
               ? 'border-accent bg-ink-700/70'
@@ -65,7 +83,43 @@ const groups = computed(() => [
             </span>
           </span>
           <span v-else class="shrink-0 text-[11px] text-slate-600">—</span>
-        </button>
+
+          <!-- Delete affordance, revealed on hover over the row. -->
+          <button
+            v-if="confirming !== asset.symbol"
+            type="button"
+            class="absolute right-1 top-1 hidden h-5 w-5 place-items-center rounded bg-ink-600 text-[11px] text-slate-400 transition-colors hover:bg-bearish hover:text-white group-hover:grid"
+            :title="`Hapus ${asset.symbol}`"
+            :aria-label="`Hapus ${asset.symbol}`"
+            @click.stop="confirming = asset.symbol"
+          >
+            ✕
+          </button>
+
+          <div
+            v-else
+            class="absolute inset-0 flex items-center justify-between gap-2 bg-ink-900/95 px-4"
+            @click.stop
+          >
+            <span class="truncate text-[11px] text-slate-300">Hapus {{ asset.symbol }}?</span>
+            <span class="flex shrink-0 gap-1">
+              <button
+                type="button"
+                class="rounded bg-bearish px-2 py-0.5 text-[10px] font-semibold text-white"
+                @click="emit('remove', asset.symbol); confirming = null"
+              >
+                Hapus
+              </button>
+              <button
+                type="button"
+                class="rounded bg-ink-600 px-2 py-0.5 text-[10px] text-slate-300"
+                @click="confirming = null"
+              >
+                Batal
+              </button>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   </aside>

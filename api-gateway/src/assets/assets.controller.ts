@@ -1,6 +1,16 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 
-import { AssetsService, AssetRow } from './assets.service';
+import { AssetDetail, AssetRow, AssetsService } from './assets.service';
+import { CreateAssetDto } from './dto/create-asset.dto';
 
 @Controller('assets')
 export class AssetsController {
@@ -14,5 +24,16 @@ export class AssetsController {
   @Get(':symbol')
   get(@Param('symbol') symbol: string): Promise<AssetRow> {
     return this.assets.findBySymbol(symbol);
+  }
+
+  @Post()
+  create(@Body() dto: CreateAssetDto): Promise<AssetDetail> {
+    return this.assets.create(dto);
+  }
+
+  @Delete(':symbol')
+  @HttpCode(200)
+  remove(@Param('symbol') symbol: string): Promise<{ symbol: string; deleted: true }> {
+    return this.assets.remove(symbol);
   }
 }

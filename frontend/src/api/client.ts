@@ -1,5 +1,6 @@
 import type {
   Asset,
+  NewAsset,
   Candle,
   Interval,
   NewsItem,
@@ -40,8 +41,30 @@ async function get<T>(path: string, params: Record<string, string | number> = {}
   return (await response.json()) as T;
 }
 
+async function send<T>(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+  const response = await fetch(new URL(`${BASE_URL}/api${path}`, window.location.origin), {
+    method,
+    headers: body ? { 'content-type': 'application/json', accept: 'application/json' } : { accept: 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as { message?: string | string[] } | null;
+    // Nest's ValidationPipe returns an array of messages; show them all.
+    const message = Array.isArray(payload?.message)
+      ? payload!.message.join('; ')
+      : (payload?.message ?? response.statusText);
+    throw new ApiError(message, response.status);
+  }
+  return (await response.json()) as T;
+}
+
 export const api = {
   assets: () => get<Asset[]>('/assets'),
+
+  createAsset: (payload: NewAsset) => send<Asset>('POST', '/assets', payload),
+
+  deleteAsset: (symbol: string) =>
+    send<{ symbol: string; deleted: true }>('DELETE', `/assets/${encodeURIComponent(symbol)}`),
 
   quotes: () => get<Quote[]>('/market/quotes'),
 

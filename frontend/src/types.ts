@@ -73,3 +73,11 @@ export interface LiveSentiment {
 
 export const INTERVALS = ['15m', '1h', '1d', '1w'] as const;
 export type Interval = (typeof INTERVALS)[number];
+
+/** Payload for creating a watchlist asset. */
+export interface NewAsset {
+  symbol: string;
+  name: string;
+  type: 'crypto' | 'stock';
+  keywords: string[];
+}

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 
+import AddAssetDialog from './components/AddAssetDialog.vue';
 import AssetSidebar from './components/AssetSidebar.vue';
 import NewsFeed from './components/NewsFeed.vue';
 import PriceChart from './components/PriceChart.vue';
@@ -22,6 +23,8 @@ const filterNewsToAsset = ref(true);
 
 const loadingNews = ref(true);
 const bootError = ref<string | null>(null);
+const showAddDialog = ref(false);
+const notice = ref<string | null>(null);
 
 const { connected, subscribeSymbol, onQuote, onSentiment } = useSocket();
 
@@ -30,6 +33,48 @@ const selectedQuote = computed(() => quotes.value[selected.value] ?? null);
 const newsFilter = computed(() => (filterNewsToAsset.value ? selected.value : null));
 
 let unsubscribe: (() => void) | null = null;
+
+async function reloadAssets(): Promise<void> {
+  assets.value = await api.assets();
+}
+
+function flash(message: string): void {
+  notice.value = message;
+  window.setTimeout(() => (notice.value = null), 4000);
+}
+
+async function onAssetCreated(symbol: string): Promise<void> {
+  showAddDialog.value = false;
+  await reloadAssets();
+  selected.value = symbol;
+  flash(`${symbol} ditambahkan. Sentimen muncul setelah scraper berjalan.`);
+
+  // Seed its quote so the sidebar is not blank until the next poll tick.
+  try {
+    const quote = await api.quote(symbol);
+    quotes.value[symbol] = quote;
+  } catch {
+    /* the price poller will fill it in shortly */
+  }
+}
+
+async function onAssetRemoved(symbol: string): Promise<void> {
+  try {
+    await api.deleteAsset(symbol);
+  } catch (err) {
+    flash(err instanceof Error ? err.message : `gagal menghapus ${symbol}`);
+    return;
+  }
+
+  delete quotes.value[symbol];
+  await reloadAssets();
+
+  // The chart is pointed at a symbol that no longer exists; move off it.
+  if (selected.value === symbol) {
+    selected.value = assets.value[0]?.symbol ?? '';
+  }
+  flash(`${symbol} dihapus dari watchlist.`);
+}
 
 async function loadSidePanels(): Promise<void> {
   loadingNews.value = true;
@@ -49,7 +94,7 @@ async function loadSidePanels(): Promise<void> {
 
 onMounted(async () => {
   try {
-    assets.value = await api.assets();
+    await reloadAssets();
     if (assets.value.length && !assets.value.some((a) => a.symbol === selected.value)) {
       selected.value = assets.value[0].symbol;
     }
@@ -170,6 +215,8 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
         :selected="selected"
         class="hidden lg:flex"
         @select="selected = $event"
+        @add="showAddDialog = true"
+        @remove="onAssetRemoved"
       />
 
       <section class="panel min-h-[320px] overflow-hidden p-1">
@@ -191,5 +238,25 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
         />
       </div>
     </main>
+
+    <AddAssetDialog
+      v-if="showAddDialog"
+      @close="showAddDialog = false"
+      @created="onAssetCreated"
+    />
+
+    <Transition
+      enter-active-class="transition-opacity duration-200"
+      leave-active-class="transition-opacity duration-300"
+      enter-from-class="opacity-0"
+      leave-to-class="opacity-0"
+    >
+      <p
+        v-if="notice"
+        class="panel fixed bottom-4 left-1/2 z-40 -translate-x-1/2 px-4 py-2 text-xs text-slate-200 shadow-lg"
+      >
+        {{ notice }}
+      </p>
+    </Transition>
   </div>
 </template>

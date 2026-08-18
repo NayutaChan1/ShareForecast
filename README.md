@@ -280,10 +280,24 @@ Semua *endpoint* diawali `/api`.
 
 ### Assets
 
-| Method | Path                   | Keterangan                              |
-|--------|------------------------|-----------------------------------------|
-| `GET`  | `/api/assets`          | Daftar watchlist. Query: `?type=crypto\|stock` |
-| `GET`  | `/api/assets/:symbol`  | Detail satu aset                        |
+| Method   | Path                   | Keterangan                              |
+|----------|------------------------|-----------------------------------------|
+| `GET`    | `/api/assets`          | Daftar watchlist. Query: `?type=crypto\|stock` |
+| `GET`    | `/api/assets/:symbol`  | Detail satu aset                        |
+| `POST`   | `/api/assets`          | Tambah aset. Simbol diverifikasi ke Binance/Yahoo sebelum disimpan |
+| `DELETE` | `/api/assets/:symbol`  | Hapus aset beserta candle & tag beritanya |
+
+Watchlist juga bisa diatur langsung dari UI — tombol **+** di header sidebar untuk menambah, dan tombol **✕** yang muncul saat hover pada baris aset untuk menghapus.
+
+```bash
+# Tambah aset
+curl -X POST http://localhost:3000/api/assets   -H 'content-type: application/json'   -d '{"symbol":"ADAUSDT","name":"Cardano","type":"crypto","keywords":["cardano"]}'
+
+# Hapus aset
+curl -X DELETE http://localhost:3000/api/assets/ADAUSDT
+```
+
+> ⚠️ Endpoint tulis ini **tidak berautentikasi**, sama seperti seluruh API lainnya. Siapa pun yang bisa menjangkau gateway dapat mengubah watchlist. Ini alasan tambahan untuk tidak mengekspos API langsung ke publik — lihat [Catatan Keamanan](#-catatan-keamanan).
 
 ### Market
 

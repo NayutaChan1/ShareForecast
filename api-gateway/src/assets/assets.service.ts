@@ -22,7 +22,18 @@ export interface AssetRow {
 
 export interface AssetDetail extends AssetRow {
   keywords: string[];
+  /** Existing articles matched to this asset when it was created. */
+  taggedArticles: number;
 }
+
+/**
+ * Escape a keyword for use inside a Postgres regex.
+ *
+ * Keywords are free text, so an unescaped "S&P 500" or "Alphabet (GOOGL)"
+ * would either error or match the wrong thing.
+ */
+const escapeRegex = (value: string): string =>
+  value.replace(/[.^$*+?()[\]{}|\\]/g, '\\$&');
 
 @Injectable()
 export class AssetsService {
@@ -87,8 +98,46 @@ export class AssetsService {
       throw new ConflictException(`'${symbol}' is already on the watchlist`);
     }
 
-    this.logger.log(`added ${dto.type} asset ${symbol}`);
-    return created;
+    // Articles are matched to assets at scrape time, so without this pass a
+    // new asset starts with an empty sentiment overlay even when the archive
+    // already holds articles naming it.
+    let taggedArticles = 0;
+    try {
+      taggedArticles = await this.backfillTags(created.id, keywords);
+    } catch (err) {
+      // The asset itself is created; a failed backfill only costs history that
+      // the next scrape pass would pick up anyway.
+      this.logger.warn(`tag backfill failed for ${symbol}: ${(err as Error).message}`);
+    }
+
+    this.logger.log(`added ${dto.type} asset ${symbol} (${taggedArticles} archived article(s) tagged)`);
+    return { ...created, taggedArticles };
+  }
+
+  /**
+   * Match the existing article archive against a newly added asset.
+   *
+   * Done in one statement rather than pulling rows into Node: Postgres `\m`
+   * and `\M` are word boundaries, the same rule the Python scraper applies, so both
+   * paths agree on what counts as a mention.
+   */
+  private async backfillTags(assetId: number, keywords: string[]): Promise<number> {
+    const patterns = keywords.map((keyword) => `\\m${escapeRegex(keyword)}\\M`);
+
+    const rows = await this.db.query<{ article_id: string }>(
+      `INSERT INTO article_assets (article_id, asset_id)
+       SELECT n.id, $2
+         FROM news_articles n
+        WHERE EXISTS (
+                SELECT 1 FROM unnest($1::text[]) AS pattern
+                 WHERE n.title || ' ' || coalesce(n.summary, '') ~* pattern
+              )
+       ON CONFLICT DO NOTHING
+       RETURNING article_id`,
+      [patterns, assetId],
+    );
+
+    return rows.length;
   }
 
   /**

@@ -81,3 +81,10 @@ export interface NewAsset {
   type: 'crypto' | 'stock';
   keywords: string[];
 }
+
+/** What the API returns after creating an asset. */
+export interface CreatedAsset extends Asset {
+  keywords: string[];
+  /** Archived articles matched to it on creation. */
+  taggedArticles: number;
+}

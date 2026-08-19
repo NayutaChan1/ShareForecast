@@ -1,5 +1,6 @@
 import type {
   Asset,
+  CreatedAsset,
   NewAsset,
   Candle,
   Interval,
@@ -61,7 +62,7 @@ async function send<T>(method: 'POST' | 'DELETE', path: string, body?: unknown):
 export const api = {
   assets: () => get<Asset[]>('/assets'),
 
-  createAsset: (payload: NewAsset) => send<Asset>('POST', '/assets', payload),
+  createAsset: (payload: NewAsset) => send<CreatedAsset>('POST', '/assets', payload),
 
   deleteAsset: (symbol: string) =>
     send<{ symbol: string; deleted: true }>('DELETE', `/assets/${encodeURIComponent(symbol)}`),

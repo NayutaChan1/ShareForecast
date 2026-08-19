@@ -4,7 +4,7 @@ import { computed, ref } from 'vue';
 import { api } from '../api/client';
 import type { NewAsset } from '../types';
 
-const emit = defineEmits<{ close: []; created: [symbol: string] }>();
+const emit = defineEmits<{ close: []; created: [symbol: string, taggedArticles: number] }>();
 
 const symbol = ref('');
 const name = ref('');
@@ -46,7 +46,7 @@ async function submit(): Promise<void> {
 
   try {
     const created = await api.createAsset(payload);
-    emit('created', created.symbol);
+    emit('created', created.symbol, created.taggedArticles);
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'failed to add asset';
   } finally {

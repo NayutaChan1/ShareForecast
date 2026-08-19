@@ -43,11 +43,15 @@ function flash(message: string): void {
   window.setTimeout(() => (notice.value = null), 4000);
 }
 
-async function onAssetCreated(symbol: string): Promise<void> {
+async function onAssetCreated(symbol: string, taggedArticles: number): Promise<void> {
   showAddDialog.value = false;
   await reloadAssets();
   selected.value = symbol;
-  flash(`${symbol} ditambahkan. Sentimen muncul setelah scraper berjalan.`);
+  flash(
+    taggedArticles > 0
+      ? `${symbol} ditambahkan — ${taggedArticles} artikel arsip langsung dicocokkan.`
+      : `${symbol} ditambahkan. Belum ada artikel arsip yang cocok; sentimen muncul setelah scraper berjalan.`,
+  );
 
   // Seed its quote so the sidebar is not blank until the next poll tick.
   try {

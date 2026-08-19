@@ -105,7 +105,7 @@ def _store_article(
     return article_id
 
 
-def scrape_once(channel) -> int:
+def scrape_once() -> int:
     """One full pass over every feed. Returns the number of new articles."""
     new_ids: list[int] = []
 
@@ -134,8 +134,19 @@ def scrape_once(channel) -> int:
 
     # Publish only after the transaction committed, so the worker can never
     # look up an article id that is not there yet.
-    for article_id in new_ids:
-        mq.publish(channel, mq.ROUTING_ANALYZE, {"article_id": article_id})
+    #
+    # The connection is opened per pass rather than held between them: a pika
+    # BlockingConnection idling for the whole interval misses its heartbeats
+    # and gets dropped by the broker, and the next publish then fails.
+    if new_ids:
+        connection = mq.connect()
+        try:
+            channel = connection.channel()
+            mq.declare_topology(channel)
+            for article_id in new_ids:
+                mq.publish(channel, mq.ROUTING_ANALYZE, {"article_id": article_id})
+        finally:
+            connection.close()
 
     log.info("scrape pass complete: %d new article(s) queued", len(new_ids))
     return len(new_ids)
@@ -143,32 +154,38 @@ def scrape_once(channel) -> int:
 
 def main() -> None:
     wait_for_db()
-    connection = mq.connect()
-    channel = connection.channel()
-    mq.declare_topology(channel)
+
+    # Verify the broker is reachable before scheduling anything, then let go of
+    # the connection — each pass opens its own.
+    mq.connect().close()
+
+    interval_seconds = settings.scrape_interval_minutes * 60
 
     scheduler = BlockingScheduler(timezone="UTC")
     scheduler.add_job(
         scrape_once,
         trigger="interval",
         minutes=settings.scrape_interval_minutes,
-        args=[channel],
         id="rss-scrape",
         max_instances=1,
         coalesce=True,
+        # APScheduler defaults this to 1 second, which silently drops the run
+        # whenever the process wakes even slightly late — under Docker Desktop
+        # that happened on every single tick and scraping stopped entirely
+        # after the first pass. A run that is late is still worth doing.
+        misfire_grace_time=interval_seconds,
     )
 
     def shutdown(*_args) -> None:
         log.info("shutting down")
         scheduler.shutdown(wait=False)
-        connection.close()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
     # Don't make the first batch wait a full interval.
-    scrape_once(channel)
+    scrape_once()
 
     log.info("scheduled every %d minute(s)", settings.scrape_interval_minutes)
     scheduler.start()

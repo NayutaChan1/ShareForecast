@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 import AddAssetDialog from './components/AddAssetDialog.vue';
 import AssetSidebar from './components/AssetSidebar.vue';
+import ConditionPanel from './components/ConditionPanel.vue';
 import KeywordEditorDialog from './components/KeywordEditorDialog.vue';
 import NewsFeed from './components/NewsFeed.vue';
 import PriceChart from './components/PriceChart.vue';
@@ -233,14 +234,18 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
         @edit-keywords="editingAsset = $event"
       />
 
-      <section class="panel min-h-[320px] overflow-hidden p-1">
-        <PriceChart
-          :key="`${selected}-${interval}`"
-          :symbol="selected"
-          :interval="interval"
-          :show-sentiment="showSentiment"
-        />
-      </section>
+      <div class="grid min-h-0 grid-rows-[1fr_auto] gap-3">
+        <section class="panel min-h-[280px] overflow-hidden p-1">
+          <PriceChart
+            :key="`${selected}-${interval}`"
+            :symbol="selected"
+            :interval="interval"
+            :show-sentiment="showSentiment"
+          />
+        </section>
+
+        <ConditionPanel v-if="selected" :symbol="selected" />
+      </div>
 
       <div class="grid min-h-0 grid-rows-[auto_1fr] gap-3">
         <SentimentGauge :summary="summary" />

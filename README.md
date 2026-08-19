@@ -17,6 +17,7 @@ Platform intelijen pasar terpusat yang menggabungkan pergerakan harga aset (Saha
 * **Real-time News Scraper** — Pemantauan dan ekstraksi otomatis berita finansial terbaru dari 10 sumber RSS (global + Indonesia).
 * **AI Sentiment Analysis** — Inferensi NLP dengan **FinBERT** untuk berita berbahasa Inggris, dan **leksikon finansial Indonesia** untuk berita berbahasa Indonesia. Pemilihan model otomatis berdasarkan bahasa sumber feed.
 * **Sentiment Overlay Chart** — Visualisasi UI interaktif yang menumpuk (*overlay*) indikator sentimen berita langsung di atas grafik harga, dengan *bucket* waktu yang selaras dengan interval *candle*.
+* **Kartu Kondisi Aset** — Ringkasan teknis terukur (tren, RSI, volatilitas, posisi rentang, volume) di bawah grafik. Menyajikan bukti, bukan rekomendasi beli/jual.
 
 ---
 
@@ -324,6 +325,16 @@ curl -X DELETE http://localhost:3000/api/assets/ADAUSDT
 | `GET`  | `/api/market/quotes`          | Harga terkini seluruh watchlist                     |
 | `GET`  | `/api/market/:symbol/quote`   | Harga terkini satu aset (Redis-cached)              |
 | `GET`  | `/api/market/:symbol/candles` | OHLCV. Query: `interval` (`1m,5m,15m,30m,1h,1d,1w`), `limit` (1–1000) |
+| `GET`  | `/api/market/:symbol/condition` | Ringkasan kondisi teknis dari 200 candle harian |
+
+**Kartu Kondisi Aset.** Endpoint `condition` menghitung lima indikator dari harga saja — tren (SMA 20/50), momentum (RSI-14 Wilder), volatilitas (deviasi baku return harian, disetahunkan), posisi dalam rentang periode, dan tren volume. Tiap indikator dikembalikan sebagai `{ value, reading }`, dengan `reading` berupa kalimat bahasa Indonesia.
+
+Dua keputusan desain yang disengaja:
+
+* **Tidak ada skor gabungan.** Tidak ada angka "layak beli 78/100". Kartu ini menyajikan bukti terukur; kesimpulannya milik Anda, karena sistem tidak tahu horizon waktu, toleransi risiko, maupun isi portofolio Anda.
+* **Ambang batas menyesuaikan kelas aset.** Volatilitas 23% dibaca *"tenang untuk kripto"*, sementara 40% dibaca *"tinggi untuk saham"*. Penyetahunan juga berbeda — 365 hari untuk kripto, 252 hari bursa untuk saham; memakai yang salah meleset sekitar 20%.
+
+Field `basis` selalu menyertakan jumlah candle yang dipakai dan flag `sufficient`. Bila di bawah 50 candle, sebagian indikator dikembalikan `null` dan UI menandainya — indikator dari 20 candle tidak pantas ditampilkan sepercaya diri indikator dari 200.
 
 ### Sentiment
 

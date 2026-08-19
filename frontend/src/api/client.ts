@@ -1,5 +1,6 @@
 import type {
   Asset,
+  AssetCondition,
   AssetWithKeywords,
   CreatedAsset,
   NewAsset,
@@ -74,6 +75,9 @@ export const api = {
     send<{ symbol: string; deleted: true }>('DELETE', `/assets/${encodeURIComponent(symbol)}`),
 
   quotes: () => get<Quote[]>('/market/quotes'),
+
+  condition: (symbol: string) =>
+    get<AssetCondition>(`/market/${encodeURIComponent(symbol)}/condition`),
 
   quote: (symbol: string) => get<Quote>(`/market/${encodeURIComponent(symbol)}/quote`),
 

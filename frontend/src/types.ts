@@ -93,3 +93,27 @@ export interface CreatedAsset extends Asset {
 export interface AssetWithKeywords extends Asset {
   keywords: string[];
 }
+
+/** One measured indicator plus a plain-language reading of it. */
+export interface Metric<T = number> {
+  value: T | null;
+  reading: string;
+}
+
+export interface AssetCondition {
+  symbol: string;
+  type: 'crypto' | 'stock';
+  asOf: number;
+  basis: { candles: number; interval: string; sufficient: boolean };
+  price: { last: number; changePct: number | null };
+  trend: { sma20: Metric; sma50: Metric; structure: Metric<string> };
+  momentum: { rsi14: Metric; return7: Metric; return30: Metric };
+  volatility: { annualisedPct: Metric };
+  range: {
+    high: number | null;
+    low: number | null;
+    positionPct: Metric;
+    drawdownPct: Metric;
+  };
+  volume: { trend: Metric<string> };
+}

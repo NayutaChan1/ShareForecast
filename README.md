@@ -15,7 +15,7 @@ Platform intelijen pasar terpusat yang menggabungkan pergerakan harga aset (Saha
 
 * **Market Data Aggregator** — Penarikan data harga historis (*candlestick*) dan *real-time* untuk aset Kripto (via Binance API) dan Saham (via yfinance).
 * **Real-time News Scraper** — Pemantauan dan ekstraksi otomatis berita finansial terbaru dari 10 sumber RSS (global + Indonesia).
-* **AI Sentiment Analysis** — Inferensi NLP menggunakan model **FinBERT** untuk mengklasifikasikan sentimen berita menjadi *Bullish*, *Bearish*, atau *Neutral*.
+* **AI Sentiment Analysis** — Inferensi NLP dengan **FinBERT** untuk berita berbahasa Inggris, dan **leksikon finansial Indonesia** untuk berita berbahasa Indonesia. Pemilihan model otomatis berdasarkan bahasa sumber feed.
 * **Sentiment Overlay Chart** — Visualisasi UI interaktif yang menumpuk (*overlay*) indikator sentimen berita langsung di atas grafik harga, dengan *bucket* waktu yang selaras dengan interval *candle*.
 
 ---
@@ -62,6 +62,8 @@ Platform intelijen pasar terpusat yang menggabungkan pergerakan harga aset (Saha
 2. `nlp-worker` mengonsumsi antrean, menjalankan FinBERT pada judul + ringkasan, menyimpan skor ke `sentiment_scores`, lalu menerbitkan hasil ke `sentiment.results`.
 3. `api-gateway` berlangganan `sentiment.results` dan meneruskannya ke browser lewat WebSocket. Gateway juga mem-*polling* harga (Binance untuk kripto, `nlp-engine`/yfinance untuk saham), meng-*cache* di Redis, dan mengarsipkan *candle* ke Postgres.
 4. `frontend` menggambar *candlestick* + garis sentimen pada satu chart, dan memperbarui harga serta berita secara langsung dari WebSocket.
+
+> **Kenapa berita Indonesia tidak pakai FinBERT?** Diukur pada 60 judul asli CNBC Indonesia, FinBERT mengembalikan `neutral` untuk **59 di antaranya** — praktis nol sinyal. Model sentimen Indonesia siap pakai (IndoBERT, indonesian-roberta) gagal juga, dengan sebab berbeda: keduanya dilatih untuk sentimen umum, di mana *"IHSG naik 0,75%"* adalah pernyataan fakta yang netral secara emosi, bukan sinyal bullish. Detail lengkapnya di [Catatan Sentimen Indonesia](#-catatan-sentimen-indonesia).
 
 > **Kenapa yfinance ada di service Python?** yfinance hanya tersedia untuk Python dan tidak punya padanan Node yang layak. Jadi `nlp-engine` yang memanggil yfinance, sementara `api-gateway` bertindak sebagai *typed HTTP client* di depannya — Binance tetap dipanggil langsung dari NestJS.
 
@@ -389,6 +391,50 @@ Salin [`.env.example`](.env.example) ke `.env`. Yang paling sering diubah:
 
 ---
 
+## 🇮🇩 Catatan Sentimen Indonesia
+
+Berita berbahasa Indonesia tidak diskor oleh FinBERT, melainkan oleh leksikon finansial di [`nlp-engine/app/lexicon_id.py`](nlp-engine/app/lexicon_id.py). Keputusan itu diambil dari pengukuran, bukan asumsi.
+
+### Yang diuji
+
+Pada 60 judul asli dari feed CNBC Indonesia:
+
+| Pendekatan | bullish | bearish | neutral | Biaya RAM |
+|---|---|---|---|---|
+| FinBERT | 0 | 1 | **59** | — |
+| Leksikon finansial ID | 14 | 6 | 40 | **0 MB** |
+
+Pada 7 kasus uji berlabel manual:
+
+| Pendekatan | Skor | Biaya |
+|---|---|---|
+| FinBERT | 1/7 | — |
+| IndoBERT (`mdhugol/...`) | 1/7 | +500 MB |
+| `indonesian-roberta-...` | 1/7 | +500 MB |
+| Terjemah id→en lalu FinBERT | 5/7 | +300 MB, +latensi |
+| **Leksikon finansial ID** | **5/7** | **0 MB** |
+
+Leksikon menang karena akurasinya setara pendekatan terjemahan tetapi tanpa biaya memori maupun latensi inferensi — dan judul pasar Indonesia sangat formulaik, hanya segelintir kata kerja yang membawa arah maknanya.
+
+### Keterbatasannya — baca ini
+
+- **Buta konteks.** Kata "rekor" bullish untuk laba, tetapi tidak untuk yield obligasi. Bobotnya sengaja direndahkan, namun kasus semacam ini tetap bisa lolos.
+- **Confidence dibatasi 0.85.** Sebuah heuristik kata kunci tidak berhak mengklaim kepastian setara model terkalibrasi, dan kedua angka itu tampil berdampingan di UI.
+- **Perlu perawatan manual.** Slang pasar baru harus ditambahkan ke leksikon; ia tidak belajar sendiri.
+- **Hanya untuk gaya judul berita.** Teks panjang dan analitis kurang cocok.
+
+Kolom `sentiment_scores.model` mencatat model mana yang dipakai (`ProsusAI/finbert` atau `id-financial-lexicon-v1`), jadi asal setiap skor selalu bisa ditelusuri.
+
+### Kenapa saham Indonesia dapat sedikit berita?
+
+Bukan karena pasokan berita kurang — sumber Indonesia menyumbang ~150 artikel. Penyebabnya **siklus liputan**: dari 151 judul Indonesia, `BBCA` disebut **0 kali** dan `BBRI` **1 kali**, sementara `BYAN` 8 kali karena sedang ramai rumor akuisisi. Media memberitakan emiten yang sedang bergerak, bukan blue chip yang tenang.
+
+Kalau ingin overlay sentimen yang ramai, pantau emiten yang sedang jadi sorotan — bukan yang paling besar.
+
+> ⚠️ **Mengubah keyword tidak menandai ulang artikel lama.** Pencocokan aset terjadi saat scraping. Aset yang baru ditambahkan lewat UI hanya akan mencocokkan artikel yang datang **setelahnya**. Untuk menandai ulang seluruh arsip, lihat skrip retag di riwayat commit.
+
+---
+
 ## 🩺 Troubleshooting
 
 **`binance request failed: ETIMEDOUT`**
@@ -430,7 +476,7 @@ Konfigurasi *default* ditujukan untuk jaringan lokal tepercaya. Sebelum dipublik
 
 ## ⚠️ Disclaimer
 
-Proyek ini dibuat untuk keperluan edukasi dan riset. Skor sentimen yang dihasilkan **bukan nasihat keuangan**. FinBERT dilatih pada teks finansial berbahasa Inggris, sehingga akurasinya pada berita berbahasa Indonesia lebih rendah.
+Proyek ini dibuat untuk keperluan edukasi dan riset. Skor sentimen yang dihasilkan **bukan nasihat keuangan**. Berita Inggris diskor FinBERT; berita Indonesia diskor leksikon berbasis kata kunci yang buta konteks dan perlu perawatan manual — lihat [Catatan Sentimen Indonesia](#-catatan-sentimen-indonesia) untuk keterbatasannya.
 
 ---
 

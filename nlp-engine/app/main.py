@@ -22,6 +22,7 @@ from .schemas import (
     Quote,
     SentimentPayload,
 )
+from . import sentiment
 from .sentiment import analyzer
 
 logging.basicConfig(
@@ -66,13 +67,13 @@ async def health() -> HealthResponse:
 
 @app.post("/analyze", response_model=SentimentPayload)
 async def analyze(payload: AnalyzeRequest) -> SentimentPayload:
-    result = await run_in_threadpool(analyzer.analyze, payload.text)
+    result = await run_in_threadpool(sentiment.analyze, payload.text, payload.lang)
     return SentimentPayload(**result.as_dict(), score=round(result.score, 6))
 
 
 @app.post("/analyze/batch", response_model=list[SentimentPayload])
 async def analyze_batch(payload: BatchAnalyzeRequest) -> list[SentimentPayload]:
-    results = await run_in_threadpool(analyzer.analyze_batch, payload.texts)
+    results = await run_in_threadpool(sentiment.analyze_batch, payload.texts, payload.lang)
     return [SentimentPayload(**r.as_dict(), score=round(r.score, 6)) for r in results]
 
 

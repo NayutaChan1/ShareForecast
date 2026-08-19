@@ -20,7 +20,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from . import queue as mq
 from .db import session_scope, wait_for_db
+from .feeds import language_for
 from .models import ArticleAsset, Asset, NewsArticle, SentimentScore
+from . import sentiment
 from .sentiment import analyzer
 
 logging.basicConfig(
@@ -49,7 +51,10 @@ def _handle(article_id: int) -> dict | None:
         if article.summary:
             text = f"{article.title}. {article.summary}"
 
-        result = analyzer.analyze(text)
+        # The feed the article came from decides the language, and the
+        # language decides the model. FinBERT has no signal on Indonesian.
+        lang = language_for(article.source)
+        result = sentiment.analyze(text, lang=lang)
 
         session.execute(
             pg_insert(SentimentScore)
@@ -84,6 +89,7 @@ def _handle(article_id: int) -> dict | None:
             "source": article.source,
             "published_at": article.published_at.isoformat(),
             "symbols": symbols,
+            "lang": lang,
             "sentiment": {
                 "label": result.label,
                 "confidence": result.confidence,

@@ -12,6 +12,7 @@ import threading
 from dataclasses import dataclass, asdict
 from typing import Any
 
+from . import lexicon_id
 from .config import settings
 
 log = logging.getLogger(__name__)
@@ -125,3 +126,37 @@ class SentimentAnalyzer:
 
 
 analyzer = SentimentAnalyzer()
+
+
+def _from_distribution(
+    positive: float, negative: float, neutral: float, model: str
+) -> SentimentResult:
+    """Build a result from an already-normalised distribution."""
+    dist = {"bullish": positive, "bearish": negative, "neutral": neutral}
+    label, confidence = max(dist.items(), key=lambda kv: kv[1])
+    return SentimentResult(
+        label=label,
+        confidence=round(confidence, 6),
+        positive=round(positive, 6),
+        negative=round(negative, 6),
+        neutral=round(neutral, 6),
+        model=model,
+    )
+
+
+def analyze(text: str, lang: str = "en") -> SentimentResult:
+    """Score one article, routed to whatever actually works for its language.
+
+    Indonesian goes to the lexicon rather than FinBERT — see lexicon_id for the
+    measurements behind that. Anything else falls through to FinBERT.
+    """
+    if lang == "id":
+        positive, negative, neutral = lexicon_id.score(text)
+        return _from_distribution(positive, negative, neutral, lexicon_id.MODEL_NAME)
+    return analyzer.analyze(text)
+
+
+def analyze_batch(texts: list[str], lang: str = "en") -> list[SentimentResult]:
+    if lang == "id":
+        return [analyze(t, lang) for t in texts]
+    return analyzer.analyze_batch(texts)

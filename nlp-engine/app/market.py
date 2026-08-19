@@ -79,6 +79,13 @@ def fetch_quote(symbol: str) -> dict[str, Any]:
     if frame is None or frame.empty:
         raise NoDataError(f"no market data for '{symbol}'")
 
+    # Yahoo emits a placeholder row for a session that has not opened yet, with
+    # NaN prices. Left in, that NaN becomes the "latest price" and then fails
+    # JSON serialisation, so every US ticker 500s during pre-market.
+    frame = frame.dropna(subset=["Close"])
+    if frame.empty:
+        raise NoDataError(f"no completed trading session for '{symbol}'")
+
     last_close = float(frame["Close"].iloc[-1])
     prev_close = float(frame["Close"].iloc[-2]) if len(frame) > 1 else last_close
     change = last_close - prev_close

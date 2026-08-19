@@ -85,5 +85,8 @@ INSERT INTO assets (symbol, name, type, keywords) VALUES
     ('MSFT',    'Microsoft Corp.', 'stock', ARRAY['microsoft', 'msft']),
     ('NVDA',    'NVIDIA Corp.',    'stock', ARRAY['nvidia', 'nvda']),
     ('TSLA',    'Tesla Inc.',      'stock', ARRAY['tesla', 'tsla', 'musk']),
-    ('BBCA.JK', 'Bank Central Asia', 'stock', ARRAY['bca', 'bank central asia']),
-    ('BBRI.JK', 'Bank Rakyat Indonesia', 'stock', ARRAY['bri', 'bank rakyat']);
+    -- Indonesian financial media headlines an emiten by its IDX ticker code
+    -- ('BBCA', 'BBRI') far more often than by name, so the code has to be a
+    -- keyword or these rows almost never match an article.
+    ('BBCA.JK', 'Bank Central Asia', 'stock', ARRAY['bbca', 'bca', 'bank central asia']),
+    ('BBRI.JK', 'Bank Rakyat Indonesia', 'stock', ARRAY['bbri', 'bri', 'bank rakyat', 'bank rakyat indonesia']);

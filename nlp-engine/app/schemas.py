@@ -7,10 +7,13 @@ from pydantic import BaseModel, Field
 
 class AnalyzeRequest(BaseModel):
     text: str = Field(min_length=1, max_length=8000)
+    # "id" routes to the Indonesian lexicon; anything else uses FinBERT.
+    lang: str = Field(default="en", max_length=8)
 
 
 class BatchAnalyzeRequest(BaseModel):
     texts: list[str] = Field(min_length=1, max_length=64)
+    lang: str = Field(default="en", max_length=8)
 
 
 class SentimentPayload(BaseModel):

@@ -10,6 +10,7 @@ import type {
   OverlayPoint,
   Quote,
   SentimentSummary,
+  SignalValidation,
 } from '../types';
 
 // Empty means same-origin: in production Caddy serves this app and proxies
@@ -89,6 +90,9 @@ export const api = {
 
   news: (symbol?: string, limit = 40) =>
     get<NewsItem[]>('/sentiment/news', symbol ? { symbol, limit } : { limit }),
+
+  validation: (symbol?: string, horizon = 7) =>
+    get<SignalValidation>('/sentiment/validation', symbol ? { symbol, horizon } : { horizon }),
 
   summary: (symbol?: string, hours = 24) =>
     get<SentimentSummary>('/sentiment/summary', symbol ? { symbol, hours } : { hours }),

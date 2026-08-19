@@ -10,10 +10,15 @@ import {
 
 import { Interval, SUPPORTED_INTERVALS, isInterval } from '../market/market.types';
 import { NewsItem, OverlayPoint, SentimentService, SentimentSummary } from './sentiment.service';
+import { ValidationService } from './validation.service';
+import { SignalValidation } from './validation.types';
 
 @Controller('sentiment')
 export class SentimentController {
-  constructor(private readonly sentiment: SentimentService) {}
+  constructor(
+    private readonly sentiment: SentimentService,
+    private readonly validation: ValidationService,
+  ) {}
 
   /** Scored news feed, newest first. */
   @Get('news')
@@ -31,6 +36,20 @@ export class SentimentController {
     @Query('hours', new DefaultValuePipe(24), ParseIntPipe) hours = 24,
   ): Promise<SentimentSummary> {
     return this.sentiment.getSummary(symbol, clamp(hours, 1, 24 * 30));
+  }
+
+  /**
+   * Does yesterday's sentiment say anything about today's price?
+   *
+   * Answers with measured forward returns per sentiment bucket rather than an
+   * assertion, including the case where the answer is "no".
+   */
+  @Get('validation')
+  signalValidation(
+    @Query('symbol') symbol?: string,
+    @Query('horizon', new DefaultValuePipe(7), ParseIntPipe) horizon = 7,
+  ): Promise<SignalValidation> {
+    return this.validation.validate(symbol, clamp(horizon, 1, 30));
   }
 
   /** Candle-aligned sentiment series for the chart overlay. */

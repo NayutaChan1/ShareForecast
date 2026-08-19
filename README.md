@@ -18,6 +18,7 @@ Platform intelijen pasar terpusat yang menggabungkan pergerakan harga aset (Saha
 * **AI Sentiment Analysis** — Inferensi NLP dengan **FinBERT** untuk berita berbahasa Inggris, dan **leksikon finansial Indonesia** untuk berita berbahasa Indonesia. Pemilihan model otomatis berdasarkan bahasa sumber feed.
 * **Sentiment Overlay Chart** — Visualisasi UI interaktif yang menumpuk (*overlay*) indikator sentimen berita langsung di atas grafik harga, dengan *bucket* waktu yang selaras dengan interval *candle*.
 * **Kartu Kondisi Aset** — Ringkasan teknis terukur (tren, RSI, volatilitas, posisi rentang, volume) di bawah grafik. Menyajikan bukti, bukan rekomendasi beli/jual.
+* **Uji Sinyal** — Mengukur apakah sentimen berita benar-benar mendahului pergerakan harga, lengkap dengan galat baku dan ambang sampel minimum. Menolak menyimpulkan saat datanya belum cukup.
 
 ---
 
@@ -343,6 +344,21 @@ Field `basis` selalu menyertakan jumlah candle yang dipakai dan flag `sufficient
 | `GET`  | `/api/sentiment/news`            | Feed berita terskor. Query: `symbol`, `limit` (1–200)  |
 | `GET`  | `/api/sentiment/summary`         | Distribusi bullish/bearish/neutral. Query: `symbol`, `hours` |
 | `GET`  | `/api/sentiment/:symbol/overlay` | Deret sentimen selaras *candle*. Query: `interval`, `limit` |
+| `GET`  | `/api/sentiment/validation`      | Uji apakah sentimen mendahului harga. Query: `symbol`, `horizon` (1–30 hari) |
+
+**Uji Sinyal.** Ini yang menjawab pertanyaan yang jarang ditanyakan orang pada dashboard sentimen: *apakah sentimennya benar-benar berguna?*
+
+Caranya: tiap pasangan (aset, hari) dikelompokkan berdasarkan rata-rata sentimen harinya, lalu diukur **return harga sesudahnya**. Kalau hari bullish diikuti return yang nyata lebih baik daripada hari bearish, sinyalnya membawa informasi. Kalau selisihnya tenggelam dalam derau, tidak — dan itu hasil yang justru lebih mungkin, serta sama pentingnya untuk diketahui.
+
+Tiga hal yang membuatnya tidak menipu diri sendiri:
+
+* **Return dihitung per hari perdagangan, bukan hari kalender.** Bursa tutup di akhir pekan; melangkah per tanggal akan menggeser atau membuang observasi.
+* **Galat baku selalu dilaporkan.** Rata-rata +0,8% dengan galat ±1,5% tidak bisa dibedakan dari nol. Tanpa kolom ini, rata-rata saja terlihat seperti temuan.
+* **Ada lantai sampel.** Bila bucket terkecil di bawah 20 observasi, status dikunci ke `insufficient` dan tidak ada kesimpulan yang ditampilkan, seberapa pun menariknya angkanya.
+
+Status yang mungkin: `insufficient` → `no_signal` → `weak_signal` → `signal`, ditentukan dari rasio selisih terhadap galat bakunya sendiri (di bawah 2× dianggap derau).
+
+> ⏳ **Butuh waktu.** Dengan data beberapa hari, hasilnya pasti `insufficient` — return 7 hari ke depan mensyaratkan 7 hari perdagangan *setelah* hari bersentimen. Panel UI menampilkan bilah kemajuan menuju ambang tersebut. Realistis baru terbaca setelah 3–6 bulan scraper berjalan.
 
 ### WebSocket (Socket.IO — `ws://localhost:3000`)
 

@@ -8,6 +8,7 @@ import KeywordEditorDialog from './components/KeywordEditorDialog.vue';
 import NewsFeed from './components/NewsFeed.vue';
 import PriceChart from './components/PriceChart.vue';
 import SentimentGauge from './components/SentimentGauge.vue';
+import SignalValidationPanel from './components/SignalValidationPanel.vue';
 import { api } from './api/client';
 import { useSocket } from './composables/useSocket';
 import { changeClass, formatPercent, formatPrice } from './lib/format';
@@ -247,8 +248,9 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
         <ConditionPanel v-if="selected" :symbol="selected" />
       </div>
 
-      <div class="grid min-h-0 grid-rows-[auto_1fr] gap-3">
+      <div class="grid min-h-0 grid-rows-[auto_auto_1fr] gap-3">
         <SentimentGauge :summary="summary" />
+        <SignalValidationPanel :symbol="newsFilter" />
         <NewsFeed
           :items="news"
           :loading="loadingNews"

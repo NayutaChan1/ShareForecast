@@ -117,3 +117,30 @@ export interface AssetCondition {
   };
   volume: { trend: Metric<string> };
 }
+
+export type SentimentBucketLabel = 'bullish' | 'bearish' | 'neutral';
+export type ValidationStatus = 'insufficient' | 'no_signal' | 'weak_signal' | 'signal';
+
+export interface BucketResult {
+  label: SentimentBucketLabel;
+  samples: number;
+  meanReturnPct: number | null;
+  stdDevPct: number | null;
+  stdErrorPct: number | null;
+}
+
+export interface SignalValidation {
+  symbol: string | null;
+  horizonDays: number;
+  generatedAt: number;
+  observations: number;
+  buckets: BucketResult[];
+  spreadPct: number | null;
+  spreadErrorPct: number | null;
+  verdict: { status: ValidationStatus; detail: string };
+  coverage: {
+    daysWithSentiment: number;
+    minSamplesPerBucket: number;
+    smallestBucket: number;
+  };
+}

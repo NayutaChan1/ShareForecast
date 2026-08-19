@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 
 import AddAssetDialog from './components/AddAssetDialog.vue';
 import AssetSidebar from './components/AssetSidebar.vue';
+import KeywordEditorDialog from './components/KeywordEditorDialog.vue';
 import NewsFeed from './components/NewsFeed.vue';
 import PriceChart from './components/PriceChart.vue';
 import SentimentGauge from './components/SentimentGauge.vue';
@@ -24,6 +25,7 @@ const filterNewsToAsset = ref(true);
 const loadingNews = ref(true);
 const bootError = ref<string | null>(null);
 const showAddDialog = ref(false);
+const editingAsset = ref<Asset | null>(null);
 const notice = ref<string | null>(null);
 
 const { connected, subscribeSymbol, onQuote, onSentiment } = useSocket();
@@ -78,6 +80,13 @@ async function onAssetRemoved(symbol: string): Promise<void> {
     selected.value = assets.value[0]?.symbol ?? '';
   }
   flash(`${symbol} dihapus dari watchlist.`);
+}
+
+async function onKeywordsSaved(symbol: string, taggedArticles: number): Promise<void> {
+  editingAsset.value = null;
+  flash(`Kata kunci ${symbol} disimpan — ${taggedArticles} artikel arsip cocok sekarang.`);
+  // The overlay and news panel are keyword-derived, so refresh what is on screen.
+  if (selected.value === symbol) await loadSidePanels();
 }
 
 async function loadSidePanels(): Promise<void> {
@@ -221,6 +230,7 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
         @select="selected = $event"
         @add="showAddDialog = true"
         @remove="onAssetRemoved"
+        @edit-keywords="editingAsset = $event"
       />
 
       <section class="panel min-h-[320px] overflow-hidden p-1">
@@ -247,6 +257,13 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
       v-if="showAddDialog"
       @close="showAddDialog = false"
       @created="onAssetCreated"
+    />
+
+    <KeywordEditorDialog
+      v-if="editingAsset"
+      :asset="editingAsset"
+      @close="editingAsset = null"
+      @saved="onKeywordsSaved"
     />
 
     <Transition

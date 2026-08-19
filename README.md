@@ -282,22 +282,38 @@ Semua *endpoint* diawali `/api`.
 
 ### Assets
 
-| Method   | Path                   | Keterangan                              |
-|----------|------------------------|-----------------------------------------|
-| `GET`    | `/api/assets`          | Daftar watchlist. Query: `?type=crypto\|stock` |
-| `GET`    | `/api/assets/:symbol`  | Detail satu aset                        |
-| `POST`   | `/api/assets`          | Tambah aset. Simbol diverifikasi ke Binance/Yahoo sebelum disimpan |
-| `DELETE` | `/api/assets/:symbol`  | Hapus aset beserta candle & tag beritanya |
+| Method   | Path                            | Keterangan                              |
+|----------|---------------------------------|-----------------------------------------|
+| `GET`    | `/api/assets`                   | Daftar watchlist. Query: `?type=crypto\|stock` |
+| `GET`    | `/api/assets/:symbol`           | Detail satu aset, termasuk kata kuncinya |
+| `POST`   | `/api/assets`                   | Tambah aset. Simbol diverifikasi ke Binance/Yahoo sebelum disimpan |
+| `PUT`    | `/api/assets/:symbol/keywords`  | Ganti daftar kata kunci, lalu tandai ulang arsip berita |
+| `DELETE` | `/api/assets/:symbol`           | Hapus aset beserta candle & tag beritanya |
 
-Watchlist juga bisa diatur langsung dari UI — tombol **+** di header sidebar untuk menambah, dan tombol **✕** yang muncul saat hover pada baris aset untuk menghapus.
+Semuanya bisa dilakukan dari UI — tombol **+** di header sidebar untuk menambah, lalu saat hover pada baris aset muncul **✎** (editor kata kunci) dan **✕** (hapus).
 
 ```bash
 # Tambah aset
-curl -X POST http://localhost:3000/api/assets   -H 'content-type: application/json'   -d '{"symbol":"ADAUSDT","name":"Cardano","type":"crypto","keywords":["cardano"]}'
+curl -X POST http://localhost:3000/api/assets \
+  -H 'content-type: application/json' \
+  -d '{"symbol":"ADAUSDT","name":"Cardano","type":"crypto","keywords":["cardano"]}'
+
+# Ganti kata kunci (kirim daftar lengkap, bukan selisihnya)
+curl -X PUT http://localhost:3000/api/assets/ADAUSDT/keywords \
+  -H 'content-type: application/json' \
+  -d '{"keywords":["cardano","ada coin"]}'
 
 # Hapus aset
 curl -X DELETE http://localhost:3000/api/assets/ADAUSDT
 ```
+
+**Penandaan ulang otomatis.** `POST` dan `PUT` sama-sama memindai arsip berita dan mengembalikan `taggedArticles` — jumlah artikel yang cocok setelah operasi. `PUT` menghitung ulang dari nol, bukan menambal, sehingga kata kunci yang dihapus juga **melepas** artikel yang hanya cocok karenanya:
+
+| Kata kunci BTCUSDT | Artikel ter-tag |
+|---|---|
+| `bitcoin`, `btc` | 72 |
+| hapus `bitcoin`, sisa `btc` | 12 |
+| kembalikan keduanya | 72 |
 
 > ⚠️ Endpoint tulis ini **tidak berautentikasi**, sama seperti seluruh API lainnya. Siapa pun yang bisa menjangkau gateway dapat mengubah watchlist. Ini alasan tambahan untuk tidak mengekspos API langsung ke publik — lihat [Catatan Keamanan](#-catatan-keamanan).
 
@@ -431,7 +447,7 @@ Bukan karena pasokan berita kurang — sumber Indonesia menyumbang ~150 artikel.
 
 Kalau ingin overlay sentimen yang ramai, pantau emiten yang sedang jadi sorotan — bukan yang paling besar.
 
-> ⚠️ **Mengubah keyword tidak menandai ulang artikel lama.** Pencocokan aset terjadi saat scraping. Aset yang baru ditambahkan lewat UI hanya akan mencocokkan artikel yang datang **setelahnya**. Untuk menandai ulang seluruh arsip, lihat skrip retag di riwayat commit.
+> 💡 **Memilih kata kunci itu murah untuk dicoba.** Tombol **✎** pada baris aset membuka editor kata kunci, dan menyimpan langsung menandai ulang seluruh arsip lalu melaporkan berapa artikel yang cocok. Jadi Anda bisa menguji kata kunci berisiko — misalnya `bumi`, yang juga berarti "earth" — lalu menghapusnya lagi kalau ternyata menarik berita non-pasar.
 
 ---
 
@@ -442,6 +458,12 @@ Host `api.binance.com` diblokir di sebagian jaringan/region (dan pada beberapa s
 
 **Data saham kosong / `no market data for this symbol`**
 Yahoo Finance menolak *traffic* `requests` biasa dan mengembalikan halaman HTML, sehingga yfinance gagal mem-parsing JSON. Proyek ini mem-*pin* `yfinance==1.6.0` yang menyamar sebagai browser lewat `curl_cffi`. Jangan turunkan ke seri `0.2.x` — versi tersebut sudah tidak berfungsi.
+
+**Berita berhenti bertambah, log scraper penuh `Run time of job ... was missed`**
+
+APScheduler membuang job yang terlambat melewati `misfire_grace_time`, dan **default-nya hanya 1 detik**. Di bawah Docker Desktop, proses kerap bangun ~50 detik terlambat, sehingga *setiap* tick dibuang dan scraping berhenti total setelah pass pertama. Proyek ini menyetelnya ke satu interval penuh — run yang telat tetap dijalankan. Kalau gejalanya muncul lagi, periksa `misfire_grace_time` di [`scraper.py`](nlp-engine/app/scraper.py), bukan jam sistem: jam host dan container biasanya sudah sinkron.
+
+Koneksi RabbitMQ scraper juga sengaja dibuka **per pass** lalu ditutup. Menahannya menganggur selama interval akan melewatkan heartbeat (60 detik) dan broker memutusnya, sehingga publish berikutnya gagal.
 
 **`no entries from <feed>` di log scraper**
 Sebagian sumber RSS sesekali menyajikan XML yang cacat. Scraper sengaja melewati feed bermasalah dan melanjutkan sisanya — ini perilaku normal, bukan kegagalan.

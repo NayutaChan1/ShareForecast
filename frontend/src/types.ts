@@ -88,3 +88,8 @@ export interface CreatedAsset extends Asset {
   /** Archived articles matched to it on creation. */
   taggedArticles: number;
 }
+
+/** An asset together with the keywords used to match news to it. */
+export interface AssetWithKeywords extends Asset {
+  keywords: string[];
+}

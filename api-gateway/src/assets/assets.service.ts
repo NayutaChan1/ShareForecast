@@ -12,6 +12,7 @@ import { DatabaseService } from '../database/database.service';
 import { BinanceService } from '../market/binance.service';
 import { StocksService } from '../market/stocks.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateKeywordsDto } from './dto/update-keywords.dto';
 
 export interface AssetRow {
   id: number;
@@ -77,12 +78,7 @@ export class AssetsService {
     const symbol = dto.symbol.trim().toUpperCase();
     const name = dto.name.trim();
 
-    // Matching lowercases the haystack, so store keywords the same way and
-    // drop duplicates the user may have typed twice.
-    const keywords = [...new Set(dto.keywords.map((k) => k.trim().toLowerCase()).filter(Boolean))];
-    if (keywords.length === 0) {
-      throw new BadRequestException('at least one non-empty keyword is required');
-    }
+    const keywords = this.normaliseKeywords(dto.keywords);
 
     await this.assertSymbolResolves(symbol, dto.type);
 
@@ -138,6 +134,57 @@ export class AssetsService {
     );
 
     return rows.length;
+  }
+
+  /** Detail of one asset, including the keywords used to match news to it. */
+  async findDetail(symbol: string): Promise<Omit<AssetDetail, 'taggedArticles'>> {
+    const asset = await this.db.queryOne<Omit<AssetDetail, 'taggedArticles'>>(
+      `SELECT id, symbol, name, type, keywords FROM assets WHERE upper(symbol) = upper($1) LIMIT 1`,
+      [symbol],
+    );
+    if (!asset) {
+      throw new NotFoundException(`asset '${symbol}' is not on the watchlist`);
+    }
+    return asset;
+  }
+
+  /**
+   * Replace an asset's keywords and rebuild its article tags.
+   *
+   * Tags are recomputed from scratch rather than topped up: a keyword the user
+   * just removed must also drop the articles it was the only reason for, and
+   * an incremental update cannot know which those were.
+   */
+  async updateKeywords(symbol: string, dto: UpdateKeywordsDto): Promise<AssetDetail> {
+    const existing = await this.findBySymbol(symbol);
+    const keywords = this.normaliseKeywords(dto.keywords);
+
+    const updated = await this.db.queryOne<Omit<AssetDetail, 'taggedArticles'>>(
+      `UPDATE assets SET keywords = $1 WHERE id = $2
+       RETURNING id, symbol, name, type, keywords`,
+      [keywords, existing.id],
+    );
+    if (!updated) {
+      throw new NotFoundException(`asset '${symbol}' is not on the watchlist`);
+    }
+
+    await this.db.query(`DELETE FROM article_assets WHERE asset_id = $1`, [existing.id]);
+    const taggedArticles = await this.backfillTags(existing.id, keywords);
+
+    this.logger.log(
+      `updated keywords for ${updated.symbol} (${taggedArticles} article(s) re-tagged)`,
+    );
+    return { ...updated, taggedArticles };
+  }
+
+  private normaliseKeywords(raw: string[]): string[] {
+    // Matching lowercases the haystack, so store keywords the same way and
+    // drop duplicates the user may have typed twice.
+    const keywords = [...new Set(raw.map((k) => k.trim().toLowerCase()).filter(Boolean))];
+    if (keywords.length === 0) {
+      throw new BadRequestException('at least one non-empty keyword is required');
+    }
+    return keywords;
   }
 
   /**

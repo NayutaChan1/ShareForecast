@@ -14,6 +14,7 @@ const emit = defineEmits<{
   select: [symbol: string];
   add: [];
   remove: [symbol: string];
+  editKeywords: [asset: Asset];
 }>();
 
 // Which row is awaiting delete confirmation. Deleting an asset drops its
@@ -84,17 +85,30 @@ const groups = computed(() => [
           </span>
           <span v-else class="shrink-0 text-[11px] text-slate-600">—</span>
 
-          <!-- Delete affordance, revealed on hover over the row. -->
-          <button
+          <!-- Row actions, revealed on hover. -->
+          <span
             v-if="confirming !== asset.symbol"
-            type="button"
-            class="absolute right-1 top-1 hidden h-5 w-5 place-items-center rounded bg-ink-600 text-[11px] text-slate-400 transition-colors hover:bg-bearish hover:text-white group-hover:grid"
-            :title="`Hapus ${asset.symbol}`"
-            :aria-label="`Hapus ${asset.symbol}`"
-            @click.stop="confirming = asset.symbol"
+            class="absolute right-1 top-1 hidden gap-1 group-hover:flex"
           >
-            ✕
-          </button>
+            <button
+              type="button"
+              class="grid h-5 w-5 place-items-center rounded bg-ink-600 text-[10px] text-slate-400 transition-colors hover:bg-accent hover:text-ink-900"
+              :title="`Kata kunci ${asset.symbol}`"
+              :aria-label="`Kata kunci ${asset.symbol}`"
+              @click.stop="emit('editKeywords', asset)"
+            >
+              ✎
+            </button>
+            <button
+              type="button"
+              class="grid h-5 w-5 place-items-center rounded bg-ink-600 text-[11px] text-slate-400 transition-colors hover:bg-bearish hover:text-white"
+              :title="`Hapus ${asset.symbol}`"
+              :aria-label="`Hapus ${asset.symbol}`"
+              @click.stop="confirming = asset.symbol"
+            >
+              ✕
+            </button>
+          </span>
 
           <div
             v-else

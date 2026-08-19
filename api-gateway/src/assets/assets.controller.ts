@@ -6,11 +6,13 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 
 import { AssetDetail, AssetRow, AssetsService } from './assets.service';
 import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateKeywordsDto } from './dto/update-keywords.dto';
 
 @Controller('assets')
 export class AssetsController {
@@ -22,8 +24,17 @@ export class AssetsController {
   }
 
   @Get(':symbol')
-  get(@Param('symbol') symbol: string): Promise<AssetRow> {
-    return this.assets.findBySymbol(symbol);
+  get(@Param('symbol') symbol: string): Promise<Omit<AssetDetail, 'taggedArticles'>> {
+    return this.assets.findDetail(symbol);
+  }
+
+  /** Replace an asset's news-matching keywords and re-tag the archive. */
+  @Put(':symbol/keywords')
+  updateKeywords(
+    @Param('symbol') symbol: string,
+    @Body() dto: UpdateKeywordsDto,
+  ): Promise<AssetDetail> {
+    return this.assets.updateKeywords(symbol, dto);
   }
 
   @Post()

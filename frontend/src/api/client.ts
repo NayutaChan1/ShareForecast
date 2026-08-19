@@ -1,5 +1,6 @@
 import type {
   Asset,
+  AssetWithKeywords,
   CreatedAsset,
   NewAsset,
   Candle,
@@ -42,7 +43,7 @@ async function get<T>(path: string, params: Record<string, string | number> = {}
   return (await response.json()) as T;
 }
 
-async function send<T>(method: 'POST' | 'DELETE', path: string, body?: unknown): Promise<T> {
+async function send<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: unknown): Promise<T> {
   const response = await fetch(new URL(`${BASE_URL}/api${path}`, window.location.origin), {
     method,
     headers: body ? { 'content-type': 'application/json', accept: 'application/json' } : { accept: 'application/json' },
@@ -62,7 +63,12 @@ async function send<T>(method: 'POST' | 'DELETE', path: string, body?: unknown):
 export const api = {
   assets: () => get<Asset[]>('/assets'),
 
+  asset: (symbol: string) => get<AssetWithKeywords>(`/assets/${encodeURIComponent(symbol)}`),
+
   createAsset: (payload: NewAsset) => send<CreatedAsset>('POST', '/assets', payload),
+
+  updateKeywords: (symbol: string, keywords: string[]) =>
+    send<CreatedAsset>('PUT', `/assets/${encodeURIComponent(symbol)}/keywords`, { keywords }),
 
   deleteAsset: (symbol: string) =>
     send<{ symbol: string; deleted: true }>('DELETE', `/assets/${encodeURIComponent(symbol)}`),

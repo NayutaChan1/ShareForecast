@@ -155,6 +155,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:8080}
       PRICE_POLL_INTERVAL_MS: ${PRICE_POLL_INTERVAL_MS:-5000}
       PRICE_CACHE_TTL: ${PRICE_CACHE_TTL:-30}
+      # Read-only here: the gateway needs the scraper's cadence to tell
+      # "quiet" apart from "stopped" in its health report.
+      SCRAPE_INTERVAL_MINUTES: ${SCRAPE_INTERVAL_MINUTES:-10}
     ports:
       - "${API_PORT:-3000}:3000"
     mem_limit: ${API_MEM_LIMIT:-512m}

@@ -3,6 +3,7 @@ import type {
   AssetCondition,
   AssetWithKeywords,
   CreatedAsset,
+  HealthReport,
   NewAsset,
   Candle,
   Interval,
@@ -63,6 +64,8 @@ async function send<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body?: u
 }
 
 export const api = {
+  health: () => get<HealthReport>('/health'),
+
   assets: () => get<Asset[]>('/assets'),
 
   asset: (symbol: string) => get<AssetWithKeywords>(`/assets/${encodeURIComponent(symbol)}`),

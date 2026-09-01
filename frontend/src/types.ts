@@ -144,3 +144,21 @@ export interface SignalValidation {
     smallestBucket: number;
   };
 }
+
+export interface HealthReport {
+  status: 'ok' | 'degraded';
+  dependencies: { postgres: boolean; redis: boolean; rabbitmq: boolean };
+  freshness: {
+    lastArticleAt: number | null;
+    articleAgeMinutes: number | null;
+    lastScoreAt: number | null;
+    pendingAnalysis: number | null;
+    lastScrapeRunAt: number | null;
+    scrapeAgeMinutes: number | null;
+    expectedIntervalMinutes: number;
+    staleAfterMinutes: number;
+    stale: boolean;
+  };
+  issues: string[];
+  uptime: number;
+}

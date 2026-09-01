@@ -13,6 +13,7 @@ export interface AppConfig {
   nlpEngineUrl: string;
   binanceApiUrl: string;
   pricePollIntervalMs: number;
+  scrapeIntervalMinutes: number;
   priceCacheTtl: number;
 }
 
@@ -53,6 +54,9 @@ export default (): AppConfig => {
     // stays reachable in regions and networks where the trading host does not.
     binanceApiUrl: process.env.BINANCE_API_URL ?? 'https://data-api.binance.vision/api/v3',
     pricePollIntervalMs: int(process.env.PRICE_POLL_INTERVAL_MS, 5000),
+    // Mirrors the scraper's own setting. The gateway does not schedule
+    // scraping; it needs the number to judge whether data has gone stale.
+    scrapeIntervalMinutes: int(process.env.SCRAPE_INTERVAL_MINUTES, 10),
     priceCacheTtl: int(process.env.PRICE_CACHE_TTL, 30),
   };
 };

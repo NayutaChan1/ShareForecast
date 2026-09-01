@@ -8,6 +8,6 @@ import { SentimentConsumerService } from './sentiment-consumer.service';
 @Module({
   imports: [MarketModule],
   providers: [EventsGateway, PriceStreamService, SentimentConsumerService],
-  exports: [EventsGateway],
+  exports: [EventsGateway, SentimentConsumerService],
 })
 export class RealtimeModule {}

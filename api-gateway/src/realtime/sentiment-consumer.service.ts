@@ -33,6 +33,17 @@ export class SentimentConsumerService implements OnModuleInit, OnApplicationShut
     private readonly gateway: EventsGateway,
   ) {}
 
+  /**
+   * Whether the broker link is live right now.
+   *
+   * Read by the health check. Reusing this consumer's own connection state is
+   * both cheaper and more honest than dialling the broker separately: it
+   * reports the link the pipeline actually depends on.
+   */
+  isConnected(): boolean {
+    return this.channel !== null && this.connection !== null;
+  }
+
   onModuleInit(): void {
     // Not awaited: the broker may still be booting, and the HTTP API should
     // come up regardless of whether the stream is live yet.

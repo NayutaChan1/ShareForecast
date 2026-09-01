@@ -75,6 +75,16 @@ CREATE TABLE article_assets (
 
 CREATE INDEX idx_article_assets_asset ON article_assets (asset_id);
 
+-- ── Liveness of the background services ───────────────────────
+-- A pass that finds no new articles writes nothing to news_articles, so
+-- "newest article" cannot distinguish a quiet news cycle from a scraper that
+-- has stopped. This records that the pass ran at all.
+CREATE TABLE service_heartbeats (
+    service     VARCHAR(64) PRIMARY KEY,
+    last_run_at TIMESTAMPTZ NOT NULL,
+    detail      TEXT
+);
+
 -- ── Seed a starter watchlist ──────────────────────────────────
 INSERT INTO assets (symbol, name, type, keywords) VALUES
     ('BTCUSDT', 'Bitcoin',   'crypto', ARRAY['bitcoin', 'btc']),

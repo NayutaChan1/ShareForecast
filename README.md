@@ -19,6 +19,7 @@ Platform intelijen pasar terpusat yang menggabungkan pergerakan harga aset (Saha
 * **Sentiment Overlay Chart** — Visualisasi UI interaktif yang menumpuk (*overlay*) indikator sentimen berita langsung di atas grafik harga, dengan *bucket* waktu yang selaras dengan interval *candle*.
 * **Kartu Kondisi Aset** — Ringkasan teknis terukur (tren, RSI, volatilitas, posisi rentang, volume) di bawah grafik. Menyajikan bukti, bukan rekomendasi beli/jual.
 * **Uji Sinyal** — Mengukur apakah sentimen berita benar-benar mendahului pergerakan harga, lengkap dengan galat baku dan ambang sampel minimum. Menolak menyimpulkan saat datanya belum cukup.
+* **Pemantauan Kesegaran Data** — Health check memeriksa RabbitMQ dan usia artikel terakhir, bukan sekadar apakah service menjawab. Menangkap pipeline yang berhenti diam-diam sementara semua container tetap terlihat sehat.
 
 ---
 
@@ -318,6 +319,44 @@ curl -X DELETE http://localhost:3000/api/assets/ADAUSDT
 | kembalikan keduanya | 72 |
 
 > ⚠️ Endpoint tulis ini **tidak berautentikasi**, sama seperti seluruh API lainnya. Siapa pun yang bisa menjangkau gateway dapat mengubah watchlist. Ini alasan tambahan untuk tidak mengekspos API langsung ke publik — lihat [Catatan Keamanan](#-catatan-keamanan).
+
+### Health
+
+| Method | Path          | Keterangan                                     |
+|--------|---------------|------------------------------------------------|
+| `GET`  | `/api/health` | Status dependensi **dan** kesegaran data       |
+
+**Kenapa ini lebih dari sekadar ping.** Dependensi yang bisa dihubungi bukan berarti pipeline berjalan. Selama pengembangan, scraper pernah berhenti **2,5 jam** sementara semua container tetap `Up`, tidak ada ERROR di log, dan health check lama tetap menjawab `ok` — karena ia hanya memeriksa PostgreSQL dan Redis.
+
+Sekarang laporannya mencakup:
+
+```json
+{
+  "status": "degraded",
+  "dependencies": { "postgres": true, "redis": true, "rabbitmq": false },
+  "freshness": {
+    "scrapeAgeMinutes": 148,
+    "articleAgeMinutes": 148,
+    "staleAfterMinutes": 30,
+    "stale": true,
+    "pendingAnalysis": 0
+  },
+  "issues": [
+    "RabbitMQ terputus — pipeline sentimen berhenti",
+    "news-scraper tidak menyelesaikan pass selama 148 menit (ambang 30 menit)"
+  ]
+}
+```
+
+* **RabbitMQ ikut diperiksa** — ia tulang punggung pipeline sentimen, dan sebelumnya tidak dipantau sama sekali. Statusnya dibaca dari koneksi konsumer yang memang sudah hidup, bukan dengan membuka koneksi baru tiap pemeriksaan.
+* **Heartbeat scraper** — `news-scraper` mencatat baris di `service_heartbeats` setiap kali menyelesaikan satu pass, **ada atau tidak ada artikel baru**. Bila tidak ada pass melewati **3× interval scrape**, status jadi `degraded`.
+
+  Ini disengaja tidak memakai "usia artikel terakhir". Pass yang tidak menemukan artikel baru tidak menulis apa pun ke `news_articles`, jadi usia artikel tidak bisa membedakan **siklus berita yang sepi** dari **scraper yang mati** — dan akan salah melapor `degraded` di malam hari atau akhir pekan. Usia artikel tetap dilaporkan sebagai informasi, tetapi bukan dasar penilaian.
+* **Antrean tertahan** — artikel tersimpan tapi belum diskor. Angka yang terus tumbuh menandakan `nlp-worker` macet.
+
+> Endpoint ini tetap membalas **HTTP 200** saat `degraded`. Disengaja: health check Docker memakai status HTTP, dan gateway tidak seharusnya di-restart hanya karena scraper macet. Liveness service dan kesehatan pipeline adalah dua hal berbeda.
+
+Di UI, statusnya muncul di header sebelah indikator **Live**. Indikator Live menunjukkan koneksi WebSocket browser Anda; indikator ini menunjukkan apakah pipeline di server masih bekerja — dua hal yang bisa berbeda, dan hanya yang kedua yang menangkap kegagalan senyap.
 
 ### Market
 

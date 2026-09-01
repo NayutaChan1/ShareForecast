@@ -9,6 +9,7 @@ import NewsFeed from './components/NewsFeed.vue';
 import PriceChart from './components/PriceChart.vue';
 import SentimentGauge from './components/SentimentGauge.vue';
 import SignalValidationPanel from './components/SignalValidationPanel.vue';
+import SystemStatus from './components/SystemStatus.vue';
 import { api } from './api/client';
 import { useSocket } from './composables/useSocket';
 import { changeClass, formatPercent, formatPrice } from './lib/format';
@@ -208,6 +209,10 @@ watch([selected, filterNewsToAsset], () => void loadSidePanels());
           />
           {{ connected ? 'Live' : 'Offline' }}
         </span>
+
+        <!-- WebSocket liveness above is not the same as the pipeline still
+             producing data; this reports the latter. -->
+        <SystemStatus />
       </div>
     </header>
 

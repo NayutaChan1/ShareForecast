@@ -17,7 +17,7 @@ from time import mktime
 
 import feedparser
 from apscheduler.schedulers.blocking import BlockingScheduler
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -147,6 +147,22 @@ def scrape_once() -> int:
                 mq.publish(channel, mq.ROUTING_ANALYZE, {"article_id": article_id})
         finally:
             connection.close()
+
+    # Recorded whether or not anything new turned up: a quiet pass is still a
+    # pass, and the health check needs to tell that apart from a dead process.
+    try:
+        with session_scope() as session:
+            session.execute(
+                text(
+                    "INSERT INTO service_heartbeats (service, last_run_at, detail)"
+                    " VALUES ('news-scraper', now(), :detail)"
+                    " ON CONFLICT (service) DO UPDATE"
+                    " SET last_run_at = excluded.last_run_at, detail = excluded.detail"
+                ),
+                {"detail": f"{len(new_ids)} new article(s)"},
+            )
+    except Exception as exc:  # noqa: BLE001 - never fail a pass over telemetry
+        log.warning("could not record heartbeat: %s", exc)
 
     log.info("scrape pass complete: %d new article(s) queued", len(new_ids))
     return len(new_ids)

@@ -15,11 +15,13 @@ import { SentimentModule } from './sentiment/sentiment.module';
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     DatabaseModule,
     RedisModule,
-    HealthModule,
     AssetsModule,
     MarketModule,
     SentimentModule,
     RealtimeModule,
+    // After RealtimeModule: the health check reads that module's live broker
+    // connection rather than opening one of its own.
+    HealthModule,
   ],
 })
 export class AppModule {}
